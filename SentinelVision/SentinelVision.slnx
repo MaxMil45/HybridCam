@@ -1,0 +1,9 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="SentinelApp/SentinelApp.csproj" />
+  <Project Path="SentinelVision/SentinelVision.vcxproj" Id="65298a8d-06a9-41cd-8835-218d61afe763" />
+</Solution>

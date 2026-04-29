@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+    <Exec Command="xcopy /y /d &quot;$(SolutionDir)x64\Debug\SentinelVision.dll&quot; &quot;$(TargetDir)&quot;&#xD;&#xA;xcopy /y /d &quot;C:\opencv\build\x64\vc16\bin\opencv_world4120.dll&quot; &quot;$(TargetDir)&quot;" />
+  </Target>
+
+</Project>

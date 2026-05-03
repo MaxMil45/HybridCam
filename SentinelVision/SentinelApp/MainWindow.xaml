@@ -8,5 +8,7 @@
         Title="MainWindow" Height="450" Width="800">
     <Grid>
         <Image x:Name="CameraFeed" Stretch="Uniform" />
+
+        <Button x:Name="StartButton" Content="Start Camera" Width="120" Height="30" Background="Green" Foreground="White" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10" Click="StartButton_Click"/>
     </Grid>
 </Window>

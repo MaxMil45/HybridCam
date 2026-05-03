@@ -1,16 +1,9 @@
-﻿using System.Runtime.InteropServices;
-using System.Text;
+﻿using System;
+using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
-using System;
-using System.Threading.Tasks;
 
 namespace SentinelApp
 {
@@ -21,9 +14,13 @@ namespace SentinelApp
     {
         private const int FrameWidth = 640;
         private const int FrameHeight = 480;
+        private const int BytesPerPixel = 3; // BGR
+
         private WriteableBitmap _bitmap;
         private IntPtr _pixelBuffer;
-        private bool _isRunning = false;
+
+        // 'volatile' ensures background threads instantly see when the UI changes this to false
+        private volatile bool _isRunning = false;
 
         public MainWindow()
         {
@@ -33,13 +30,12 @@ namespace SentinelApp
             _bitmap = new WriteableBitmap(FrameWidth, FrameHeight, 96, 96, PixelFormats.Bgr24, null);
             CameraFeed.Source = _bitmap;
 
-            // 2. Allocate unmanaged memory for C++ to write to
-            int byteCount = FrameWidth * FrameHeight * 3;
+            // 2. Allocate unmanaged memory EXACTLY ONCE for the life of the app
+            int byteCount = FrameWidth * FrameHeight * BytesPerPixel;
             _pixelBuffer = Marshal.AllocHGlobal(byteCount);
 
-            // 3. Start Camera and Loop
-            this.Loaded += (s, e) => StartCamera();
-            this.Closing += (s, e) => StopCamera();
+            // 3. Ensure memory is cleanly destroyed when the user closes the app
+            this.Closing += MainWindow_Closing;
         }
 
         private async void StartCamera()
@@ -49,10 +45,34 @@ namespace SentinelApp
                 _isRunning = true;
                 await Task.Run(() => CaptureLoop()); // Run on background thread
             }
+            else
+            {
+                MessageBox.Show("Failed to open camera hardware.");
+            }
+        }
+
+        private void StartButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (!_isRunning)
+            {
+                StartCamera();
+                StartButton.Content = "Stop Camera";
+                StartButton.Background = new SolidColorBrush(Colors.Red);
+            }
+            else
+            {
+                StopCamera();
+                StartButton.Content = "Start Camera";
+                StartButton.Background = new SolidColorBrush(Colors.Green);
+            }
         }
 
         private void CaptureLoop()
         {
+            // Optimize by calculating these outside the while loop
+            int stride = FrameWidth * BytesPerPixel;
+            int totalBytes = stride * FrameHeight;
+
             while (_isRunning)
             {
                 // Ask C++ to fill our pointer with pixel data
@@ -63,7 +83,7 @@ namespace SentinelApp
                     {
                         _bitmap.Lock();
                         // Copy data from our pointer to the UI bitmap
-                        _bitmap.WritePixels(new Int32Rect(0, 0, FrameWidth, FrameHeight), _pixelBuffer, FrameWidth * FrameHeight * 3, FrameWidth * 3);
+                        _bitmap.WritePixels(new Int32Rect(0, 0, FrameWidth, FrameHeight), _pixelBuffer, totalBytes, stride);
                         _bitmap.AddDirtyRect(new Int32Rect(0, 0, FrameWidth, FrameHeight));
                         _bitmap.Unlock();
                     });
@@ -73,9 +93,35 @@ namespace SentinelApp
 
         private void StopCamera()
         {
+            _isRunning = false; // Tells the while loop to stop
+            NativeMethods.CloseCamera(); // Frees the hardware lock
+
+            ClearScreenToBlack(); // Visually reset the UI
+        }
+
+        private void ClearScreenToBlack()
+        {
+            // Creates an empty black byte array and writes it to the UI
+            int stride = FrameWidth * BytesPerPixel;
+            byte[] blackPixels = new byte[FrameWidth * FrameHeight * BytesPerPixel];
+
+            _bitmap.Lock();
+            _bitmap.WritePixels(new Int32Rect(0, 0, FrameWidth, FrameHeight), blackPixels, stride, 0);
+            _bitmap.AddDirtyRect(new Int32Rect(0, 0, FrameWidth, FrameHeight));
+            _bitmap.Unlock();
+        }
+
+        private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
+        {
+            // The ultimate cleanup. Runs when the application is closing.
             _isRunning = false;
             NativeMethods.CloseCamera();
-            Marshal.FreeHGlobal(_pixelBuffer); // Prevent memory leak!
+
+            if (_pixelBuffer != IntPtr.Zero)
+            {
+                Marshal.FreeHGlobal(_pixelBuffer); // Prevent memory leak!
+                _pixelBuffer = IntPtr.Zero;
+            }
         }
     }
 }
